@@ -1,8 +1,28 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 
-const TOKEN = process.env.BOT_TOKEN || '8517712618:AAHBwhZCk5kgjmSa_Dzs1-ypxnS5D6_vofM';
+const TOKEN = process.env.BOT_TOKEN || '7746431532:AAExmkILdavxmVAUu_01Rp72KrZKQW400Vc';
 const DATA_FILE = './data.json';
+
+// ─── KHQR CONFIG ──────────────────────────────────────────────────────────────
+// Set your KHQR image path or URL below.
+// You can use a local file path like './khqr.jpg' or a public image URL.
+const KHQR_IMAGE = process.env.KHQR_IMAGE || './khqr.jpg';
+
+// Your ABA/KHQR account name shown in confirmation messages
+const KHQR_NAME = process.env.KHQR_NAME || 'KUN KHLINTON';
+const KHQR_ACCOUNT = process.env.KHQR_ACCOUNT || '974 462 445';
+const MERCHANT_ID  = process.env.MERCHANT_ID  || 'ABAPAYRW466401R';
+
+// Subscription plans: [label, months, priceUSD]
+const PLANS = [
+  { id: '1m', label: '1 Month',  months: 1, price: 5  },
+  { id: '3m', label: '3 Months', months: 3, price: 12 },
+  { id: '6m', label: '6 Months', months: 6, price: 20 },
+];
+
+// Pending payments: userId → { planId, requestedAt }
+const pendingPayments = {};
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 function loadData() {
@@ -115,14 +135,14 @@ function buildSummary(state) {
     `📤 ${b("Today's Payouts")} (${state.payouts.length} transactions)`,
     payoutLines,
     `━━━━━━━━━━━━━━━━━━━━`,
-    `💰 Total Deposits: ${c(formatNumber(totalDeposits))}`,
-    `💸 Total Payouts: ${c(formatNumber(totalPayouts))}`,
-    `⚙️ Exchange Rate: ${c(String(exchangeRate))}`,
-    `📉 Transaction Fee: ${c(feePercent + '%')}`,
+    `💰 Total Deposits:          ${c(formatNumber(totalDeposits))}`,
+    `💸 Total Payouts:           ${c(formatNumber(totalPayouts))}`,
+    `⚙️ Exchange Rate:           ${c(String(exchangeRate))}`,
+    `📉 Transaction Fee:         ${c(feePercent + '%')}`,
     `━━━━━━━━━━━━━━━━━━━━`,
-    `📌 Amount Total: ${c(formatNumber(totalDeposits))}`,
-    `📌 After Fee: ${c(formatNumber(amountAfterFee))}`,
-    `📌 Total Received: ${c(formatNumber(totalReceived))}`,
+    `📌 Amount Total:            ${c(formatNumber(totalDeposits))}`,
+    `📌 Amount After Deduct Fee: ${c(formatNumber(amountAfterFee))}`,
+    `📌 Total Received:          ${c(formatNumber(totalReceived))}`,
   ].join('\n');
 }
 
@@ -135,6 +155,7 @@ function helpText() {
     `${c('fee 10')} — Set fee percentage (%)`,
     `${c('withdraw 100')} — Withdraw from total`,
     `${c('clear bill')} — Reset deposits &amp; payouts to 0`,
+    `/subscribe — Buy/renew a subscription via KHQR`,
     `/summary — View full summary report`,
     `/reset — Clear all data (owner only)`,
     `/admin — Manage users (owner only)`,
@@ -161,7 +182,7 @@ function checkExpiries() {
       send(bot, parseInt(userId),
         `⚠️ ${b('Your subscription expires in ' + days + ' day(s)!')}\n` +
         `Expiry: ${formatExpiry(user.expiry)}\n\n` +
-        `Please contact the owner to renew and continue using the bot.`
+        `Use /subscribe to renew your subscription.`
       );
       user.warned = true;
       saveData(db);
@@ -170,7 +191,7 @@ function checkExpiries() {
     if (remaining <= 0 && !user.expiredNotified) {
       send(bot, parseInt(userId),
         `🔒 ${b('Your subscription has expired.')}\n\n` +
-        `Please contact the owner to deposit and continue using the bot.`
+        `Use /subscribe to renew via KHQR payment.`
       );
       user.expiredNotified = true;
       saveData(db);
@@ -179,6 +200,47 @@ function checkExpiries() {
 }
 setInterval(checkExpiries, 60 * 60 * 1000); // every hour
 checkExpiries(); // also run on startup
+
+// ─── KHQR HELPERS ─────────────────────────────────────────────────────────────
+
+function sendSubscribePlans(chatId, intro) {
+  const planButtons = PLANS.map(p => ([{
+    text: `${p.label} — $${p.price}`,
+    callback_data: `plan_${p.id}`,
+  }]));
+  return bot.sendMessage(chatId, intro, {
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: planButtons },
+  });
+}
+
+async function sendKHQR(bot, chatId, userId, plan) {
+  const caption =
+    `🏧 ${b('KHQR Payment')}\n\n` +
+    `📦 Plan: ${b(plan.label)} — ${b('$' + plan.price)}\n` +
+    `👤 Pay to: ${b(KHQR_NAME)}\n` +
+    `📱 Account: ${c(KHQR_ACCOUNT)}\n\n` +
+    `1️⃣ Scan the QR code above with your banking app\n` +
+    `2️⃣ Pay exactly ${b('$' + plan.price)}\n` +
+    `3️⃣ Take a screenshot of the payment confirmation\n` +
+    `4️⃣ Send the screenshot here\n\n` +
+    `⏳ Your request will be activated after the owner confirms payment.`;
+
+  try {
+    if (KHQR_IMAGE.startsWith('http')) {
+      await bot.sendPhoto(chatId, KHQR_IMAGE, { caption, parse_mode: 'HTML' });
+    } else {
+      await bot.sendPhoto(chatId, fs.createReadStream(KHQR_IMAGE), { caption, parse_mode: 'HTML' });
+    }
+  } catch {
+    // Fallback if image not found
+    await send(bot, chatId,
+      `🏧 ${b('KHQR Payment')}\n\n` +
+      `⚠️ QR image not configured yet. Please contact the owner.\n\n` +
+      caption
+    );
+  }
+}
 
 // /start
 bot.onText(/\/start/, (msg) => {
@@ -201,19 +263,133 @@ bot.onText(/\/start/, (msg) => {
   }
 
   if (status.reason === 'expired') {
-    return send(bot, msg.chat.id,
+    return sendSubscribePlans(msg.chat.id,
       `🔒 ${b('Your subscription has expired.')}\n\n` +
-      `Please contact the owner to deposit and continue using the bot.`
+      `Choose a plan to renew via KHQR payment:`
     );
   }
 
-  send(bot, msg.chat.id,
+  sendSubscribePlans(msg.chat.id,
     `👋 Hello @${username}!\n\n` +
-    `⛔ You need approval to use this bot.\n` +
-    `Please contact the owner and pay to get access.\n\n` +
-    `Your User ID: ${c(String(userId))}\n` +
-    `(Share this ID with the owner)`
+    `Choose a subscription plan to get started:`
   );
+});
+
+// /subscribe — let any user pick a plan
+bot.onText(/\/subscribe/, (msg) => {
+  const userId = msg.from.id;
+  if (isOwner(userId)) return send(bot, msg.chat.id, `👑 You are the owner — no subscription needed.`);
+  sendSubscribePlans(msg.chat.id, `💳 ${b('Choose a subscription plan:')}`);
+});
+
+// ─── CALLBACK: plan selection ──────────────────────────────────────────────────
+bot.on('callback_query', async (query) => {
+  const userId = query.from.id;
+  const chatId = query.message.chat.id;
+  const username = query.from.username || query.from.first_name || String(userId);
+  const data = query.data;
+
+  await bot.answerCallbackQuery(query.id);
+
+  // ── Plan selected ────────────────────────────────────────────────────────────
+  if (data.startsWith('plan_')) {
+    const planId = data.replace('plan_', '');
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) return;
+
+    pendingPayments[userId] = { planId, username, requestedAt: Date.now() };
+
+    await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+      chat_id: chatId,
+      message_id: query.message.message_id,
+    }).catch(() => {});
+
+    await send(bot, chatId,
+      `✅ You selected: ${b(plan.label + ' — $' + plan.price)}\n\n` +
+      `Scan the KHQR below and send your payment screenshot here.`
+    );
+    await sendKHQR(bot, chatId, userId, plan);
+
+    // Notify admin
+    const adminMsg =
+      `💰 ${b('New Payment Request')}\n\n` +
+      `👤 User: @${username} (${c(String(userId))})\n` +
+      `📦 Plan: ${plan.label} — $${plan.price}\n` +
+      `🕐 Time: ${phnomPenhTime()}\n\n` +
+      `Wait for the user to send a payment screenshot, then use:\n` +
+      `${c('/approve ' + userId + ' ' + plan.months)} to activate`;
+
+    db.admins.forEach(adminId => send(bot, adminId, adminMsg).catch(() => {}));
+    return;
+  }
+
+  // ── Admin confirms payment ────────────────────────────────────────────────────
+  if (data.startsWith('confirm_')) {
+    if (!isOwner(userId)) return send(bot, chatId, '⛔ Only the owner can confirm payments.');
+    const parts = data.split('_'); // confirm_<userId>_<planId>
+    const targetId = parseInt(parts[1]);
+    const planId = parts[2];
+    const plan = PLANS.find(p => p.id === planId);
+    if (!plan) return;
+
+    const targetUsername = pendingPayments[targetId]?.username || String(targetId);
+    const expiry = addMonths(plan.months);
+
+    // Check if already has subscription — extend from current expiry
+    const existing = db.approvedUsers[targetId];
+    const base = existing?.expiry && existing.expiry > Date.now() ? existing.expiry : Date.now();
+    const newExpiry = new Date(base);
+    newExpiry.setMonth(newExpiry.getMonth() + plan.months);
+
+    db.approvedUsers[targetId] = {
+      username: targetUsername,
+      expiry: newExpiry.getTime(),
+      approvedAt: Date.now(),
+      warned: false,
+      expiredNotified: false,
+    };
+    saveData(db);
+    delete pendingPayments[targetId];
+
+    await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+      chat_id: chatId,
+      message_id: query.message.message_id,
+    }).catch(() => {});
+
+    send(bot, chatId,
+      `✅ Payment confirmed for @${targetUsername}!\n` +
+      `📦 Plan: ${plan.label}\n` +
+      `⏰ Expires: ${formatExpiry(newExpiry.getTime())}`
+    );
+
+    send(bot, targetId,
+      `🎉 ${b('Payment confirmed! Your subscription is now active.')}\n\n` +
+      `📦 Plan: ${b(plan.label)}\n` +
+      `⏰ Expires: ${b(formatExpiry(newExpiry.getTime()))}\n\n` +
+      `Send /start to begin using the bot.`
+    ).catch(() => {});
+    return;
+  }
+
+  // ── Admin rejects payment ─────────────────────────────────────────────────────
+  if (data.startsWith('reject_')) {
+    if (!isOwner(userId)) return send(bot, chatId, '⛔ Only the owner can reject payments.');
+    const targetId = parseInt(data.replace('reject_', ''));
+    const targetUsername = pendingPayments[targetId]?.username || String(targetId);
+    delete pendingPayments[targetId];
+
+    await bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+      chat_id: chatId,
+      message_id: query.message.message_id,
+    }).catch(() => {});
+
+    send(bot, chatId, `🚫 Payment rejected for @${targetUsername}.`);
+    send(bot, targetId,
+      `❌ ${b('Your payment was not confirmed.')}\n\n` +
+      `Please contact the owner or try again with /subscribe.`
+    ).catch(() => {});
+    return;
+  }
 });
 
 bot.onText(/\/help/, (msg) => send(bot, msg.chat.id, helpText()));
@@ -416,6 +592,48 @@ function sendAccessDenied(bot, chatId, reason) {
     `⛔ You are not approved to use this bot.\nPlease contact the owner to get access.`
   );
 }
+
+// ─── PAYMENT SCREENSHOT HANDLER ───────────────────────────────────────────────
+bot.on('photo', async (msg) => {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  const username = msg.from.username || msg.from.first_name || String(userId);
+
+  if (isOwner(userId)) return; // owners don't need to pay
+  if (!pendingPayments[userId]) return; // not in a payment flow
+
+  const { planId } = pendingPayments[userId];
+  const plan = PLANS.find(p => p.id === planId);
+  if (!plan) return;
+
+  await send(bot, chatId,
+    `📨 ${b('Screenshot received!')}\n\n` +
+    `The owner will verify your payment shortly.\n` +
+    `You'll get a notification once confirmed. ✅`
+  );
+
+  // Forward screenshot + confirm/reject buttons to all admins
+  const fileId = msg.photo[msg.photo.length - 1].file_id;
+  const caption =
+    `💳 ${b('Payment Screenshot')}\n\n` +
+    `👤 @${username} (${c(String(userId))})\n` +
+    `📦 ${plan.label} — $${plan.price}\n` +
+    `🕐 ${phnomPenhTime()}\n\n` +
+    `Tap ✅ Confirm to activate or ❌ Reject to decline.`;
+
+  const buttons = [[
+    { text: '✅ Confirm Payment', callback_data: `confirm_${userId}_${plan.id}` },
+    { text: '❌ Reject',          callback_data: `reject_${userId}` },
+  ]];
+
+  db.admins.forEach(adminId => {
+    bot.sendPhoto(adminId, fileId, {
+      caption,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: buttons },
+    }).catch(() => {});
+  });
+});
 
 // ─── MAIN MESSAGE HANDLER ─────────────────────────────────────────────────────
 bot.on('message', (msg) => {

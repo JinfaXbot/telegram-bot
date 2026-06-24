@@ -112,15 +112,17 @@ function c(t) { return `<code>${t}</code>`; }
 function buildSummary(state) {
   const exchangeRate = state.exchangeRate || 1;
   const feePercent = state.fee || 0;
-  // Normal deposits go through rate & fee; expr deposits (usdt) are added directly to Total Received
-  const normalDeposits = state.deposits.filter(d => !d.isExpr);
-  const exprDeposits   = state.deposits.filter(d =>  d.isExpr);
-  const totalDeposits   = normalDeposits.reduce((s, d) => s + d.amount, 0);
-  const totalPayouts    = state.payouts.reduce((s, d) => s + d.amount, 0);
-  const feeAmount       = totalDeposits * (feePercent / 100);
-  const amountAfterFee  = totalDeposits - feeAmount;
-  const totalExprUsdt   = exprDeposits.reduce((s, d) => s + d.usdt, 0);
-  const totalReceived   = amountAfterFee / exchangeRate + totalExprUsdt;
+  // amount = the KHR value (e.g. 5200) for all deposits
+  const totalDeposits = state.deposits.reduce((s, d) => s + d.amount, 0);
+  const totalPayouts  = state.payouts.reduce((s, d) => s + d.amount, 0);
+  const feeAmount     = totalDeposits * (feePercent / 100);
+  const amountAfterFee = totalDeposits - feeAmount;
+  // For expr deposits, use the pre-calculated usdt directly; for normal deposits, convert via rate
+  const totalReceived = state.deposits.reduce((s, d) => {
+    if (d.isExpr) return s + d.usdt;
+    const fee = d.amount * (feePercent / 100);
+    return s + (d.amount - fee) / exchangeRate;
+  }, 0);
 
   const timeOnly = (t) => t.split(', ')[1] || t;
 
@@ -723,10 +725,12 @@ bot.on('message', (msg) => {
     );
   }
 
-  // +expression deposit (e.g. +5200/61.65*0.955) — result goes directly to Total Received USDT
-  const calcMatch = text.match(/^\+\s*([\d.+\-*/() ]+)$/);
-  if (calcMatch && /[*/]/.test(calcMatch[1])) {
-    const exprRaw = calcMatch[1].trim();
+  // +expression deposit (e.g. +5200/61.65*0.955)
+  // The first number (e.g. 5200) goes to Total Deposits; the full expression result goes to Total Received USDT
+  const calcMatch = text.match(/^\+\s*(\d+(?:\.\d+)?)([*/].+)$/);
+  if (calcMatch) {
+    const khrAmount = parseFloat(calcMatch[1]);
+    const exprRaw = calcMatch[1] + calcMatch[2].trim();
     let usdt;
     try {
       const safeExpr = exprRaw.replace(/[^0-9+\-*/().\ ]/g, '');
@@ -736,7 +740,7 @@ bot.on('message', (msg) => {
       return send(bot, chatId, `⚠️ Could not calculate: ${c(exprRaw)}\nPlease check your expression.`);
     }
     usdt = Math.round(usdt * 100) / 100;
-    state.deposits.push({ amount: 0, usdt, expr: exprRaw, isExpr: true, username, userId, time });
+    state.deposits.push({ amount: khrAmount, usdt, expr: exprRaw, isExpr: true, username, userId, time });
     saveData(db);
     return send(bot, chatId, buildSummary(state), replyExtra);
   }

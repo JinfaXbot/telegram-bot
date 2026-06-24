@@ -1,0 +1,54 @@
+{
+  "chats": {
+    "7278424892": {
+      "total": 0,
+      "exchangeRate": 62,
+      "fee": 10,
+      "deposits": [
+        {
+          "amount": 10000,
+          "username": "CigarettesAfterSex_007",
+          "userId": 7278424892,
+          "time": "24/06/2026, 10:15:05"
+        },
+        {
+          "amount": 10000,
+          "username": "CigarettesAfterSex_007",
+          "userId": 7278424892,
+          "time": "24/06/2026, 10:21:00"
+        }
+      ],
+      "payouts": []
+    },
+    "-5312801720": {
+      "total": 0,
+      "exchangeRate": 62,
+      "fee": 10,
+      "deposits": [
+        {
+          "amount": 10000,
+          "username": "CigarettesAfterSex_007",
+          "userId": 7278424892,
+          "time": "24/06/2026, 09:35:40"
+        }
+      ],
+      "payouts": []
+    }
+  },
+  "admins": [
+    7278424892
+  ],
+  "approvedUsers": {
+    "1552089836": {
+      "username": "1552089836",
+      "expiry": null,
+      "approvedAt": 1782269743352,
+      "warned": false,
+      "expiredNotified": false
+    },
+    "7278424892": {
+      "expiry": null,
+      "username": "CigarettesAfterSex_007"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "telegram-finance-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for tracking deposits, payouts, exchange rate, and fees",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}

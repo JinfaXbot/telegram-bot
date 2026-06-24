@@ -134,6 +134,7 @@ function buildSummary(state) {
     `━━━━━━━━━━━━━━━━━`,
     `📥 ${b("Today's Deposits")} (${state.deposits.length} transactions)`,
     depositLines,
+    
     `📤 ${b("Today's Payouts")} (${state.payouts.length} transactions)`,
     payoutLines,
     `━━━━━━━━━━━━━━━━━`,

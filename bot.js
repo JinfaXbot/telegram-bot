@@ -144,7 +144,7 @@ function buildSummary(state) {
     `━━━━━━━━━━━━━━━━━`,
     `📌 Amount Total:            ${c(formatNumber(totalDeposits))}`,
     `📌 Amount After Deduct Fee: ${c(formatNumber(amountAfterFee))}`,
-    `📌 Total Received:          ${c(formatNumber(totalReceived + USDT))}`,
+    `📌 Total Received:          ${c(formatNumber(totalReceived))}`,
   ].join('\n');
 }
 

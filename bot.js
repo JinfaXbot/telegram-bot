@@ -134,18 +134,18 @@ function buildSummary(state) {
     `━━━━━━━━━━━━━━━━━`,
     `📥 ${b("Today's Deposits")} (${state.deposits.length} transactions)`,
     depositLines,
-    
+    `━━━━━━━━━━━━━━━━━`,
     `📤 ${b("Today's Payouts")} (${state.payouts.length} transactions)`,
     payoutLines,
     `━━━━━━━━━━━━━━━━━`,
     `💰 Total Deposits:          ${c(formatNumber(totalDeposits))}`,
-    `💸 Total Payouts:           ${c(formatNumber(totalPayouts))}`,
+    `💸 Today Payouts:           ${c(formatNumber(totalPayouts))}`,
     `⚙️ Exchange Rate:           ${c(String(exchangeRate))}`,
     `📉 Transaction Fee:         ${c(feePercent + '%')}`,
     `━━━━━━━━━━━━━━━━━`,
     `📌 Amount Total:            ${c(formatNumber(totalDeposits))}`,
-    `📌 Amount After Deduct Fee: ${c(formatNumber(amountAfterFee))}`,
-    `📌 Total Received:          ${c(formatNumber(totalReceived))}`,
+    `📌 After Deducted Fee:      ${c(formatNumber(amountAfterFee))}`,
+    `📌 Total Received USDT:     ${c(formatNumber(totalReceived))}`,
   ].join('\n');
 }
 

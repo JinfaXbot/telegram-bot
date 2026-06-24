@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 
-const TOKEN = process.env.BOT_TOKEN || '7746431532:AAExmkILdavxmVAUu_01Rp72KrZKQW400Vc';
+const TOKEN = process.env.BOT_TOKEN || '8517712618:AAHBwhZCk5kgjmSa_Dzs1-ypxnS5D6_vofM';
 const DATA_FILE = './data.json';
 
 // ─── KHQR CONFIG ──────────────────────────────────────────────────────────────
@@ -118,31 +118,33 @@ function buildSummary(state) {
   const amountAfterFee = totalDeposits - feeAmount;
   const totalReceived = amountAfterFee / exchangeRate;
 
+  const timeOnly = (t) => t.split(', ')[1] || t;
+
   const depositLines = state.deposits.length
-    ? state.deposits.map(d => `  • [${d.time}] @${d.username || d.userId} ➕ ${formatNumber(d.amount)}`).join('\n')
+    ? state.deposits.map(d => `• ${timeOnly(d.time)} @${d.username || d.userId} ➕ ${formatNumber(d.amount)}`).join('\n')
     : '  (none)';
 
   const payoutLines = state.payouts.length
-    ? state.payouts.map(d => `  • [${d.time}] @${d.username || d.userId} ➖ ${formatNumber(d.amount)}`).join('\n')
+    ? state.payouts.map(d => `• ${timeOnly(d.time)} @${d.username || d.userId} ➖ ${formatNumber(d.amount)}`).join('\n')
     : '  (none)';
 
   return [
     `📊 ${b('SUMMARY REPORT')}`,
     `🕐 Phnom Penh Time: ${phnomPenhTime()}`,
-    `━━━━━━━━━━━━━━━━━━━━`,
+    `━━━━━━━━━━━━━━━━━`,
     `📥 ${b("Today's Deposits")} (${state.deposits.length} transactions)`,
     depositLines,
     `📤 ${b("Today's Payouts")} (${state.payouts.length} transactions)`,
     payoutLines,
-    `━━━━━━━━━━━━━━━━━━━━`,
+    `━━━━━━━━━━━━━━━━━`,
     `💰 Total Deposits:          ${c(formatNumber(totalDeposits))}`,
     `💸 Total Payouts:           ${c(formatNumber(totalPayouts))}`,
     `⚙️ Exchange Rate:           ${c(String(exchangeRate))}`,
     `📉 Transaction Fee:         ${c(feePercent + '%')}`,
-    `━━━━━━━━━━━━━━━━━━━━`,
+    `━━━━━━━━━━━━━━━━━`,
     `📌 Amount Total:            ${c(formatNumber(totalDeposits))}`,
     `📌 Amount After Deduct Fee: ${c(formatNumber(amountAfterFee))}`,
-    `📌 Total Received:          ${c(formatNumber(totalReceived))}`,
+    `📌 Total Received:          ${c(formatNumber(totalReceived + USDT))}`,
   ].join('\n');
 }
 
@@ -271,7 +273,7 @@ bot.onText(/\/start/, (msg) => {
 
   sendSubscribePlans(msg.chat.id,
     `👋 Hello @${username}!\n\n` +
-    `Choose a subscription plan to get started:`
+    `Choose a subscription plan to get started or contact the owner https://t.me/CigarettesAfterSex_007:`
   );
 });
 

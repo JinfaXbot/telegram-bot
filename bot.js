@@ -112,16 +112,23 @@ function c(t) { return `<code>${t}</code>`; }
 function buildSummary(state) {
   const exchangeRate = state.exchangeRate || 1;
   const feePercent = state.fee || 0;
-  const totalDeposits = state.deposits.reduce((s, d) => s + d.amount, 0);
-  const totalPayouts = state.payouts.reduce((s, d) => s + d.amount, 0);
-  const feeAmount = totalDeposits * (feePercent / 100);
-  const amountAfterFee = totalDeposits - feeAmount;
-  const totalReceived = amountAfterFee / exchangeRate;
+  // Normal deposits go through rate & fee; expr deposits (usdt) are added directly to Total Received
+  const normalDeposits = state.deposits.filter(d => !d.isExpr);
+  const exprDeposits   = state.deposits.filter(d =>  d.isExpr);
+  const totalDeposits   = normalDeposits.reduce((s, d) => s + d.amount, 0);
+  const totalPayouts    = state.payouts.reduce((s, d) => s + d.amount, 0);
+  const feeAmount       = totalDeposits * (feePercent / 100);
+  const amountAfterFee  = totalDeposits - feeAmount;
+  const totalExprUsdt   = exprDeposits.reduce((s, d) => s + d.usdt, 0);
+  const totalReceived   = amountAfterFee / exchangeRate + totalExprUsdt;
 
   const timeOnly = (t) => t.split(', ')[1] || t;
 
   const depositLines = state.deposits.length
-    ? state.deposits.map(d => `• ${timeOnly(d.time)} @${d.username || d.userId} ➕ ${formatNumber(d.amount)}`).join('\n')
+    ? state.deposits.map(d => d.isExpr
+        ? `• ${timeOnly(d.time)} @${d.username || d.userId} ➕ ${d.expr}`
+        : `• ${timeOnly(d.time)} @${d.username || d.userId} ➕ ${formatNumber(d.amount)}`
+      ).join('\n')
     : '  (none)';
 
   const payoutLines = state.payouts.length
@@ -716,28 +723,22 @@ bot.on('message', (msg) => {
     );
   }
 
-  // +expression deposit (e.g. +5200/61.65*0.955)
-  const calcMatch = text.match(/^\+\s*([\d.,+\-*/(). ]+)$/);
-  if (calcMatch) {
+  // +expression deposit (e.g. +5200/61.65*0.955) — result goes directly to Total Received USDT
+  const calcMatch = text.match(/^\+\s*([\d.+\-*/() ]+)$/);
+  if (calcMatch && /[*/]/.test(calcMatch[1])) {
     const exprRaw = calcMatch[1].trim();
-    if (/[*/]/.test(exprRaw) || /[\d]\s*[+-]\s*[\d]/.test(exprRaw)) {
-      let amount;
-      try {
-        const safeExpr = exprRaw.replace(/,/g, '').replace(/[^0-9+\-*/().\ ]/g, '');
-        amount = Function('"use strict"; return (' + safeExpr + ')')();
-        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) throw new Error('invalid');
-      } catch {
-        return send(bot, chatId, `⚠️ Could not calculate: ${c(exprRaw)}\nPlease check your expression.`);
-      }
-      amount = Math.round(amount * 100) / 100;
-      state.deposits.push({ amount, username, userId, time });
-      saveData(db);
-      return send(bot, chatId,
-        `🧮 ${b('Calculated:')} ${c(exprRaw)} = ${c(formatNumber(amount))}\n✅ Added as deposit.\n\n` +
-        buildSummary(state),
-        replyExtra
-      );
+    let usdt;
+    try {
+      const safeExpr = exprRaw.replace(/[^0-9+\-*/().\ ]/g, '');
+      usdt = Function('"use strict"; return (' + safeExpr + ')')();
+      if (typeof usdt !== 'number' || !isFinite(usdt) || usdt <= 0) throw new Error('invalid');
+    } catch {
+      return send(bot, chatId, `⚠️ Could not calculate: ${c(exprRaw)}\nPlease check your expression.`);
     }
+    usdt = Math.round(usdt * 100) / 100;
+    state.deposits.push({ amount: 0, usdt, expr: exprRaw, isExpr: true, username, userId, time });
+    saveData(db);
+    return send(bot, chatId, buildSummary(state), replyExtra);
   }
 
   // +number deposit

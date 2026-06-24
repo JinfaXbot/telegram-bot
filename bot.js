@@ -121,11 +121,11 @@ function buildSummary(state) {
   const timeOnly = (t) => t.split(', ')[1] || t;
 
   const depositLines = state.deposits.length
-    ? state.deposits.map(d => `• ${timeOnly(d.time)} @${d.username || d.userId} ➕ ${formatNumber(d.amount)}`).join('\n')
+    ? state.deposits.map(d => `• ${timeOnly(d.time)} ${d.displayName || d.username || d.userId} ➕ ${formatNumber(d.amount)}`).join('\n')
     : '  (none)';
 
   const payoutLines = state.payouts.length
-    ? state.payouts.map(d => `• ${timeOnly(d.time)} @${d.username || d.userId} ➖ ${formatNumber(d.amount)}`).join('\n')
+    ? state.payouts.map(d => `• ${timeOnly(d.time)} ${d.displayName || d.username || d.userId} ➖ ${formatNumber(d.amount)}`).join('\n')
     : '  (none)';
 
   return [
@@ -153,6 +153,7 @@ function helpText() {
   return [
     `${b('Available Commands:')}`,
     `➕ ${c('+100')} — Add deposit amount`,
+    `➕ ${c('+5200/61.65*0.955')} — Calculate &amp; add as deposit`,
     `➖ ${c('-100')} — Add payout amount`,
     `${c('rate 60')} — Set exchange rate`,
     `${c('fee 10')} — Set fee percentage (%)`,
@@ -647,12 +648,14 @@ bot.on('message', (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
   const username = msg.from.username || msg.from.first_name || String(userId);
+  const displayName = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || username;
   const time = phnomPenhTime();
   const replyExtra = msg.reply_to_message ? { reply_to_message_id: msg.reply_to_message.message_id } : {};
 
-  // Save username when we see them
+  // Save username and displayName when we see them
   if (db.approvedUsers[userId]) {
     db.approvedUsers[userId].username = username;
+    db.approvedUsers[userId].displayName = displayName;
   }
 
   const status = accessStatus(userId);
@@ -705,7 +708,7 @@ bot.on('message', (msg) => {
     if (amount > available) {
       return send(bot, chatId, `⚠️ Withdraw ${b(formatNumber(amount))} exceeds available ${b(formatNumber(available))}`);
     }
-    state.payouts.push({ amount, username, userId, time });
+    state.payouts.push({ amount, username, displayName, userId, time });
     saveData(db);
     return send(bot, chatId,
       `💸 ${b('Withdraw: ' + formatNumber(amount))}\n` +
@@ -716,11 +719,39 @@ bot.on('message', (msg) => {
     );
   }
 
+  // +expression deposit (e.g. +5200/61.65*0.955)
+  const calcMatch = text.match(/^\+\s*([\d.,+\-*/().\s]+)$/);
+  if (calcMatch) {
+    const exprRaw = calcMatch[1].trim();
+    // Only handle if it contains at least one math operator (not a plain number)
+    if (/[+\-*/]/.test(exprRaw)) {
+      let amount;
+      try {
+        // Sanitize: allow only digits, operators, dots, spaces, parentheses
+        const safeExpr = exprRaw.replace(/,/g, '').replace(/[^0-9+\-*/().\s]/g, '');
+        // eslint-disable-next-line no-new-func
+        amount = Function('"use strict"; return (' + safeExpr + ')')();
+        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) throw new Error('invalid');
+      } catch {
+        return send(bot, chatId, `⚠️ Could not calculate: ${c(exprRaw)}\nPlease check your expression.`);
+      }
+      amount = Math.round(amount * 100) / 100;
+      state.deposits.push({ amount, username, displayName, userId, time });
+      saveData(db);
+      return send(bot, chatId,
+        `🧮 ${b('Calculated:')} ${c(exprRaw)} = ${c(formatNumber(amount))}\n` +
+        `✅ Added as deposit.\n\n` +
+        buildSummary(state),
+        replyExtra
+      );
+    }
+  }
+
   // +number deposit
   const plusMatch = text.match(/^\+\s*([\d.]+)$/);
   if (plusMatch) {
     const amount = parseFloat(plusMatch[1]);
-    state.deposits.push({ amount, username, userId, time });
+    state.deposits.push({ amount, username, displayName, userId, time });
     saveData(db);
     return send(bot, chatId, buildSummary(state), replyExtra);
   }
@@ -729,7 +760,7 @@ bot.on('message', (msg) => {
   const minusMatch = text.match(/^-\s*([\d.]+)$/);
   if (minusMatch) {
     const amount = parseFloat(minusMatch[1]);
-    state.payouts.push({ amount, username, userId, time });
+    state.payouts.push({ amount, username, displayName, userId, time });
     saveData(db);
     return send(bot, chatId, buildSummary(state), replyExtra);
   }

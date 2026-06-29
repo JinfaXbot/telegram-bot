@@ -659,15 +659,26 @@ bot.on('message', (msg) => {
   const time = phnomPenhTime();
   const replyExtra = msg.reply_to_message ? { reply_to_message_id: msg.reply_to_message.message_id } : {};
 
+  // Only owners/admins can use text commands — silently ignore everyone else
+  if (!isOwner(userId)) return;
+
   // Save username when we see them
   if (db.approvedUsers[userId]) {
     db.approvedUsers[userId].username = username;
   }
 
-  const status = accessStatus(userId);
-  if (!status.ok) return sendAccessDenied(bot, chatId, status.reason);
-
   const state = getChatState(chatId);
+
+  // Silently ignore plain numbers or unrecognized text (no + / - / rate / fee / withdraw / clear bill)
+  const isValidCommand =
+    /^clear\s*bill$/i.test(text) ||
+    /^rate\s+[\d.]+$/i.test(text) ||
+    /^fee\s+[\d.]+$/i.test(text) ||
+    /^withdraw\s+[\d.]+$/i.test(text) ||
+    /^\+\s*\d+(?:\.\d+)?([*/].+)?$/.test(text) ||
+    /^-\s*[\d.]+$/.test(text);
+
+  if (!isValidCommand) return;
 
   // clear bill
   if (/^clear\s*bill$/i.test(text)) {
